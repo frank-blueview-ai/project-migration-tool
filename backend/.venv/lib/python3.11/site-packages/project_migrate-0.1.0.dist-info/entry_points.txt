@@ -1,0 +1,2 @@
+[console_scripts]
+project-migrate = project_migrate.cli.main:app

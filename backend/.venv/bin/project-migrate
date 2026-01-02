@@ -1,0 +1,7 @@
+#!/home/frank/dev/project-migration-tool/backend/.venv/bin/python3
+import sys
+from project_migrate.cli.main import app
+if __name__ == '__main__':
+    if sys.argv[0].endswith('.exe'):
+        sys.argv[0] = sys.argv[0][:-4]
+    sys.exit(app())

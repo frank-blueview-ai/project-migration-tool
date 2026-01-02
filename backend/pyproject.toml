@@ -1,0 +1,23 @@
+[project]
+name = "project-migrate"
+version = "0.1.0"
+description = "Project migration tool backend (starter)"
+authors = [{ name = "Frank", email = "frank@example.com" }]
+readme = "README.md"
+requires-python = ">=3.10"
+
+dependencies = [
+  "fastapi",
+  "uvicorn[standard]",
+  "typer",
+  "pydantic>=2",
+  "pathspec",
+  "sqlmodel",
+]
+
+[project.scripts]
+project-migrate = "project_migrate.cli.main:app"
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"

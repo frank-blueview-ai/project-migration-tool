@@ -1,0 +1,11 @@
+backend:
+  image: your-registry/project-migrate-backend:prod
+  replicas: 3
+
+frontend:
+  image: your-registry/project-migrate-frontend:prod
+  replicas: 3
+
+ingress:
+  enabled: true
+  host: project-migrate.example.com

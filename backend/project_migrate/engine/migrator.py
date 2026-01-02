@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Frank Perez from The Blueview Group Corporation. All rights reserved.
+# https://www.blueview.ai
+
 
 from pathlib import Path
 from typing import List, Dict, Iterable, Callable
@@ -54,6 +57,7 @@ def run_migration(
     parallelism: int = 4,
     global_ignores: List[str] | None = None,
     project_ignore_file: str | None = None,
+    project_ignore_content: str | None = None,
     progress_callback: Callable[[int, int], None] | None = None,
     cancel_event: threading.Event | None = None,
 ) -> Dict:
@@ -63,7 +67,18 @@ def run_migration(
     dest = Path(destination)
 
     # Auto-discover ignore file if not provided
-    if not project_ignore_file:
+    if project_ignore_content:
+        # Create a temporary file with the content
+        import tempfile
+        # We need it to be persistent for the duration of discovery?
+        # Actually ignores.py reads it once.
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.migrateignore') as tmp:
+            tmp.write(project_ignore_content)
+            project_ignore_file = tmp.name
+        # Note: We should cleanup, but for now let's rely on OS or simple cleanup
+        logger.info("Using provided ignore content (saved to %s)", project_ignore_file)
+        
+    elif not project_ignore_file:
         for possible_name in [".migrateignore", ".path_migrator_ignore"]:
             possible_path = src / possible_name
             if possible_path.exists() and possible_path.is_file():

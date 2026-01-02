@@ -1,0 +1,19 @@
+from pathlib import Path
+from project_migrate.engine.ignores import load_ignore_patterns, build_spec, is_ignored
+
+
+def test_ignore_patterns_basic(tmp_path: Path):
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "node_modules").mkdir()
+    (src / "node_modules" / "file.js").write_text("x")
+    (src / "app.py").write_text("x")
+
+    ignore_file = tmp_path / ".ignore"
+    ignore_file.write_text("node_modules/\n*.log\n")
+
+    patterns = load_ignore_patterns(["*.tmp"], str(ignore_file))
+    spec = build_spec(patterns)
+
+    assert is_ignored(src / "node_modules" / "file.js", src, spec)
+    assert not is_ignored(src / "app.py", src, spec)

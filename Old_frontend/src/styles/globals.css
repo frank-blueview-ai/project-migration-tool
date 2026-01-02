@@ -1,0 +1,29 @@
+@keyframes fade-slide {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-slide {
+  animation: fade-slide 0.25s ease-out;
+}
+*:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid #3B82F6;
+  outline-offset: 2px;
+}
+:root {
+  --bg: #0D1117;
+  --bg-card: #161B22;
+  --border: #2D333B;
+  --text: #E6EDF3;
+  --text-muted: #9BA3B4;
+}

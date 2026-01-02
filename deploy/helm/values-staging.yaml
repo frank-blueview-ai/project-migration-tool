@@ -1,0 +1,12 @@
+
+backend:
+  image: your-registry/project-migrate-backend:staging
+  replicas: 2
+
+frontend:
+  image: your-registry/project-migrate-frontend:staging
+  replicas: 2
+
+ingress:
+  enabled: true
+  host: project-migrate.staging.example.com

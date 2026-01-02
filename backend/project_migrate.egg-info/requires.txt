@@ -1,0 +1,5 @@
+fastapi
+uvicorn[standard]
+typer
+pydantic>=2
+pathspec

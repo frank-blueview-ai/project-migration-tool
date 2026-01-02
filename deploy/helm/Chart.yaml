@@ -1,0 +1,6 @@
+apiVersion: v2
+name: project-migrate
+description: A Helm chart for Project Migrate
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
