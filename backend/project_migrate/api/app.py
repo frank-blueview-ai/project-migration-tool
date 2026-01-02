@@ -69,12 +69,30 @@ def _run_migration_job(job_id: str, request: MigrationRequest, cancel_event: thr
     jobs.job_manager.update(job)
 
     logger = logging.getLogger("project_migrate")
-    # We define a custom append wrapper that saves to DB
+    
+    # Buffering state
+    log_buffer = []
+    last_flush_time = [0.0]
+    
+    def flush_logs(force=False):
+        current_time = time.time()
+        # Flush if we have logs AND (enough time passed OR buffer is big OR forcing)
+        if log_buffer and (
+            force or 
+            (current_time - last_flush_time[0] >= 1.0) or 
+            (len(log_buffer) >= 50)
+        ):
+            # Re-fetch job to update safely
+            job_to_update = jobs.job_manager.get(job_id)
+            if job_to_update:
+                job_to_update.logs = job_to_update.logs + list(log_buffer)
+                jobs.job_manager.update(job_to_update)
+                log_buffer.clear()
+                last_flush_time[0] = current_time
+
     def append_log(msg: str):
-        # We need to re-fetch or keep updating the object
-        # Ideally we batch updates or just update on every log (expensive but safe for now)
-        job.logs = job.logs + [msg]
-        jobs.job_manager.update(job)
+        log_buffer.append(msg)
+        flush_logs(force=False)
 
     handler = JobLogHandler(append_log)
     logger.addHandler(handler)
@@ -82,23 +100,24 @@ def _run_migration_job(job_id: str, request: MigrationRequest, cancel_event: thr
     try:
         validate_paths(request.source, request.destination)
         
-        last_update_time = [0.0]  # Use list to allow modification in closure
+        last_progress_update_time = [0.0]
 
         def update_progress(total: int, processed: int):
             current_time = time.time()
             # Update only if 1 second passed or completed
-            if current_time - last_update_time[0] >= 1.0 or processed >= total:
+            if current_time - last_progress_update_time[0] >= 1.0 or processed >= total:
+                # Also flush logs when we update progress
+                flush_logs(force=True)
+                
                 # Refresh job to check for status changes (like cancellation)
-                # We fetch a fresh copy so we don't overwrite 'cancelled' with 'running'
                 fresh_job = jobs.job_manager.get(job_id)
                 if not fresh_job or fresh_job.status == "cancelled":
-                    # If cancelled, don't update progress (or at least don't revert status)
                     return
                 
                 fresh_job.total_files = total
                 fresh_job.files_processed = processed
                 jobs.job_manager.update(fresh_job)
-                last_update_time[0] = current_time
+                last_progress_update_time[0] = current_time
         
         result = migrator.run_migration(
             source=request.source,
@@ -111,28 +130,32 @@ def _run_migration_job(job_id: str, request: MigrationRequest, cancel_event: thr
             progress_callback=update_progress,
             cancel_event=cancel_event,
         )
+        
+        # Flush any remaining logs before final status update
+        flush_logs(force=True)
+        
         if cancel_event.is_set():
-             # Refetch to ensure we have latest progress stats
              job = jobs.job_manager.get(job_id)
              if job:
                 job.status = "cancelled"
                 jobs.job_manager.update(job)
         else:
-             # Refetch to ensure we have latest progress stats
              job = jobs.job_manager.get(job_id)
              if job:
                 job.result = result
                 job.status = "finished" if result.get("success") else "failed"
                 jobs.job_manager.update(job)
     except Exception as exc:  # noqa
-        # Refetch to ensure we have latest state
+        # Ensure unexpected errors are logged
+        append_log(f"Error: {exc}")
+        flush_logs(force=True)
+        
         job = jobs.job_manager.get(job_id)
         if job:
             if cancel_event.is_set():
                  job.status = "cancelled"
-                 append_log("Job cancelled by user")
+                 job.logs.append("Job cancelled by user") # distinct append for final message
             else:
-                 append_log(f"Error: {exc}")
                  job.status = "failed"
             jobs.job_manager.update(job)
     finally:
@@ -181,9 +204,27 @@ def _run_rollback_job(job_id: str, request: RollbackRequest):
     jobs.job_manager.update(job)
 
     logger = logging.getLogger("project_migrate")
+    
+    log_buffer = []
+    last_flush_time = [0.0]
+
+    def flush_logs(force=False):
+        current_time = time.time()
+        if log_buffer and (
+            force or 
+            (current_time - last_flush_time[0] >= 1.0) or 
+            (len(log_buffer) >= 50)
+        ):
+            job_to_update = jobs.job_manager.get(job_id)
+            if job_to_update:
+                job_to_update.logs = job_to_update.logs + list(log_buffer)
+                jobs.job_manager.update(job_to_update)
+                log_buffer.clear()
+                last_flush_time[0] = current_time
+
     def append_log(msg: str):
-        job.logs = job.logs + [msg]
-        jobs.job_manager.update(job)
+        log_buffer.append(msg)
+        flush_logs(force=False)
 
     handler = JobLogHandler(append_log)
     logger.addHandler(handler)
@@ -194,13 +235,21 @@ def _run_rollback_job(job_id: str, request: RollbackRequest):
             manifest_path=request.manifest_path,
             dry_run=request.dry_run,
         )
-        job.result = result
-        job.status = "finished"
-        jobs.job_manager.update(job)
+        flush_logs(force=True)
+        
+        job = jobs.job_manager.get(job_id)
+        if job:
+            job.result = result
+            job.status = "finished"
+            jobs.job_manager.update(job)
     except Exception as exc:  # noqa
         append_log(f"Error: {exc}")
-        job.status = "failed"
-        jobs.job_manager.update(job)
+        flush_logs(force=True)
+        
+        job = jobs.job_manager.get(job_id)
+        if job:
+            job.status = "failed"
+            jobs.job_manager.update(job)
     finally:
         logger.removeHandler(handler)
 

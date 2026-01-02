@@ -10,8 +10,12 @@ os.makedirs("data", exist_ok=True)
 sqlite_file_name = "data/jobs.db"
 sqlite_url = f"sqlite:///{sqlite_file_name}"
 
-connect_args = {"check_same_thread": False}
+connect_args = {"check_same_thread": False, "timeout": 30}
 engine = create_engine(sqlite_url, connect_args=connect_args)
+
+# Enable WAL mode for better concurrency
+with engine.connect() as connection:
+    connection.exec_driver_sql("PRAGMA journal_mode=WAL;")
 
 
 def create_db_and_tables():
