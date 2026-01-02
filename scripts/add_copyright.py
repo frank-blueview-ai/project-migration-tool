@@ -5,8 +5,20 @@ from pathlib import Path
 # Configuration
 SOURCE_DIRS = [
     "backend",
-    "frontend/src",
+    "frontend",  # Changed from frontend/src to frontend to catch root config files
 ]
+
+EXCLUDE_DIRS = {
+    "node_modules",
+    "dist",
+    "build",
+    ".git",
+    "__pycache__",
+    ".pytest_cache",
+    ".venv",
+    "venv",
+    "coverage",
+}
 
 EXTENSIONS = {
     ".py": {"style": "hash", "comment": "#"},
@@ -14,6 +26,9 @@ EXTENSIONS = {
     ".tsx": {"style": "slash", "comment": "//"},
     ".js": {"style": "slash", "comment": "//"},
     ".jsx": {"style": "slash", "comment": "//"},
+    ".html": {"style": "xml", "comment": "<!--"},
+    ".css": {"style": "css", "comment": "/*"},
+    ".scss": {"style": "css", "comment": "/*"},
 }
 
 COPYRIGHT_TEXT = """Copyright (c) 2026 Frank Perez from The Blueview Group Corporation. All rights reserved.
@@ -25,6 +40,11 @@ def get_header(style):
         return "\n".join([f"# {line}" for line in lines]) + "\n\n"
     elif style == "slash":
         return "\n".join([f"// {line}" for line in lines]) + "\n\n"
+    elif style == "xml":
+        # Compact XML style
+        return "<!--\n" + "\n".join([f"  {line}" for line in lines]) + "\n-->\n\n"
+    elif style == "css":
+        return "/*\n" + "\n".join([f" * {line}" for line in lines]) + "\n */\n\n"
     return ""
 
 def has_header(content, header_snippet):
@@ -47,7 +67,9 @@ def process_file(path):
     config = EXTENSIONS[ext]
     header = get_header(config["style"])
     
-    first_header_line = header.strip().split('\n')[0]
+    # Check for the copyright text specifically to avoid duplication
+    # regardless of the comment style
+    unique_substring = "Copyright (c) 2026 Frank Perez"
 
     try:
         content = path.read_text(encoding="utf-8")
@@ -55,7 +77,7 @@ def process_file(path):
         print(f"Skipping binary or non-utf8 file: {path}")
         return False
 
-    if first_header_line in content:
+    if unique_substring in content:
         # Header already present
         return False
 
@@ -67,6 +89,10 @@ def process_file(path):
         insert_idx += 1
         if len(lines) > 1 and (lines[1].startswith("#!") or lines[1].startswith("# -*-")):
             insert_idx += 1
+            
+    # For HTML, if it starts with <!DOCTYPE, maybe put it after?
+    # Usually comments before doctype are fine, but inside <html> is sometimes preferred?
+    # Standard practice is top of file.
     
     new_content = "".join(lines[:insert_idx]) + header + "".join(lines[insert_idx:])
     path.write_text(new_content, encoding="utf-8")
@@ -83,8 +109,13 @@ def main():
             print(f"Directory not found: {base_path}")
             continue
             
-        for path in base_path.rglob("*"):
-            if path.is_file():
+        # Manual walk to respect exclusions
+        for parent, dirs, files in os.walk(base_path):
+            # Modify dirs in-place to skip excluded directories
+            dirs[:] = [d for d in dirs if d not in EXCLUDE_DIRS]
+            
+            for file in files:
+                path = Path(parent) / file
                 if process_file(path):
                     changed_count += 1
     
